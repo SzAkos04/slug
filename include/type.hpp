@@ -6,7 +6,6 @@ enum class PrimitiveType {
     I32,
     F64,
     Bool,
-    String,
 
     Unknown,
 };

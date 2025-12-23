@@ -1,10 +1,12 @@
 #include "astPrinter.hpp"
+#include "codegen.hpp"
 #include "compilerOptions.hpp"
 #include "driver.hpp"
 #include "lexer.hpp"
 #include "parser.hpp"
 
 #include <iostream>
+#include <llvm/Support/raw_ostream.h>
 #include <stdexcept>
 #include <string>
 
@@ -57,6 +59,11 @@ void Driver::compile(const CompilerOptions &opts) {
 
     ASTPrinter printer;
     ast->accept(printer);
+
+    LLVMCodeGen codegen;
+    ast->accept(codegen);
+
+    codegen.getModule()->print(llvm::errs(), nullptr);
 }
 
 void Driver::showHelp() {

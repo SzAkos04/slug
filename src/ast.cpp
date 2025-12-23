@@ -1,6 +1,9 @@
 #include "ast.hpp"
 
 void LiteralExpr::accept(ASTVisitor &visitor) { visitor.visit(*this); }
+void VariableExpr::accept(ASTVisitor &visitor) { visitor.visit(*this); }
+void BinaryExpr::accept(ASTVisitor &visitor) { visitor.visit(*this); }
+void UnaryExpr::accept(ASTVisitor &visitor) { visitor.visit(*this); }
 
 void BlockStmt::accept(ASTVisitor &visitor) { visitor.visit(*this); }
 void FnStmt::accept(ASTVisitor &visitor) { visitor.visit(*this); }

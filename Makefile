@@ -1,7 +1,5 @@
-CXX := g++
+CXX := clang++
 PROJECT := slug
-CFLAGS := -Wall -Wextra -Werror -Wpedantic
-LDFLAGS ?=
 INCLUDES := -Iinclude
 SRC_DIR := src
 SRC := $(wildcard $(SRC_DIR)/*.cpp)
@@ -16,6 +14,16 @@ endif
 BUILD_DIR := build
 BUILD_ARGS ?= -DDEBUG
 OBJ := $(SRC:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
+
+LLVM_CONFIG := llvm-config
+
+LLVM_CXXFLAGS := $(shell $(LLVM_CONFIG) --cxxflags)
+LLVM_CXXFLAGS := $(subst -I,-isystem,$(LLVM_CXXFLAGS))
+LLVM_LDFLAGS  := $(shell $(LLVM_CONFIG) --ldflags --system-libs)
+LLVM_LIBS     := $(shell $(LLVM_CONFIG) --libs core)
+
+CFLAGS := -Wall -Wextra -Werror -Wpedantic $(LLVM_CXXFLAGS)
+LDFLAGS := $(LLVM_LDFLAGS) $(LLVM_LIBS)
 
 GREEN := $(shell printf '[0;32m')
 CYAN := $(shell printf '[0;36m')
@@ -35,7 +43,7 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 
 $(BUILD_DIR)/$(PROJECT): $(OBJ)
 	$(ECHO) "$(CYAN)[LINK]$(RESET) Creating binary at $@"
-	@$(CXX) $(CFLAGS) $^ -o $@ $(INCLUDES) $(LDFLAGS) $(BUILD_ARGS)
+	@$(CXX) $^ -o $@ $(LDFLAGS)
 	$(ECHO) "$(GREEN)[OK]$(RESET) Build complete: $@"
 
 release:

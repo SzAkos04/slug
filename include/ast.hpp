@@ -28,6 +28,45 @@ struct LiteralExpr : Expr {
     void accept(ASTVisitor &visitor) override;
 };
 
+struct VariableExpr : Expr {
+    std::string name;
+
+    explicit VariableExpr(std::string name) : name(std::move(name)) {}
+    void accept(ASTVisitor &visitor) override;
+};
+
+enum class BinaryOp {
+    Add, // x + y
+    Sub, // x - y
+    Mul, // x * y
+    Div, // x / y
+};
+
+struct BinaryExpr : Expr {
+    BinaryOp op;
+    std::unique_ptr<Expr> lhs;
+    std::unique_ptr<Expr> rhs;
+
+    BinaryExpr(BinaryOp op, std::unique_ptr<Expr> lhs,
+               std::unique_ptr<Expr> rhs)
+        : op(op), lhs(std::move(lhs)), rhs(std::move(rhs)) {}
+    void accept(ASTVisitor &visitor) override;
+};
+
+enum class UnaryOp {
+    Negate, // -x
+    Not,    // !x
+};
+
+struct UnaryExpr : Expr {
+    UnaryOp op;
+    std::unique_ptr<Expr> operand;
+
+    UnaryExpr(UnaryOp op, std::unique_ptr<Expr> operand)
+        : op(op), operand(std::move(operand)) {}
+    void accept(ASTVisitor &visitor) override;
+};
+
 struct BlockStmt : Stmt {
     std::vector<std::unique_ptr<Stmt>> stmts;
 
@@ -60,6 +99,7 @@ struct FnStmt : Stmt {
 
 struct LetStmt : Stmt {
     std::string name;
+    bool mut = false;
     Type type;
     std::unique_ptr<Expr> initializer;
 
@@ -91,6 +131,9 @@ struct ASTVisitor {
     virtual ~ASTVisitor() = default;
 
     virtual void visit(LiteralExpr &expr) = 0;
+    virtual void visit(VariableExpr &expr) = 0;
+    virtual void visit(BinaryExpr &expr) = 0;
+    virtual void visit(UnaryExpr &expr) = 0;
 
     virtual void visit(BlockStmt &stmt) = 0;
     virtual void visit(FnStmt &stmt) = 0;

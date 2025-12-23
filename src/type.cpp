@@ -10,8 +10,6 @@ std::ostream &operator<<(std::ostream &os, PrimitiveType t) {
         return os << "F64";
     case PrimitiveType::Bool:
         return os << "Bool";
-    case PrimitiveType::String:
-        return os << "String";
     case PrimitiveType::Unknown:
         return os << "Unknown";
     }

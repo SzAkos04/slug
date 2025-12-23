@@ -128,7 +128,6 @@ void Lexer::identifier() {
     }
 
     std::string lexeme = this->src.substr(this->start, this->cur - this->start);
-    TokenType type = TokenType::Identifier;
     if (lexeme == "true") {
         this->addTokenWithLiteral(TokenType::Boolean, Literal(true));
     } else if (lexeme == "false") {
@@ -141,7 +140,7 @@ void Lexer::identifier() {
     } else if (lexeme == "return") {
         this->addToken(TokenType::Return);
     } else {
-        this->addTokenWithLiteral(type, Literal(lexeme));
+        this->addToken(TokenType::Identifier);
     }
 }
 

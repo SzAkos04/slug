@@ -140,8 +140,6 @@ Type Parser::parseType(const std::string &lexeme) {
         return Type(PrimitiveType::F64);
     } else if (lexeme == "bool") {
         return Type(PrimitiveType::Bool);
-    } else if (lexeme == "string") {
-        return Type(PrimitiveType::String);
     } else {
         throw std::runtime_error("Unknown type: " + lexeme);
     }
