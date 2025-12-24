@@ -18,21 +18,42 @@ enum class TokenType {
     Colon,      // :
 
     // One or two character tokens
-    Bang,       // !
-    BangEqual,  // !=
-    Equal,      // =
-    EqualEqual, // ==
-    // ...
+    Equal,        // =
+    EqualEqual,   // ==
+    Bang,         // !
+    BangEqual,    // !=
+    Plus,         // +
+    PlusEqual,    // +=
+    Minus,        // -
+    MinusEqual,   // -=
+    Star,         // *
+    StarEqual,    // *=
+    Slash,        // /
+    SlashEqual,   // /=
+    Percent,      // %
+    PercentEqual, // %=
+    Less,         // <
+    LessEqual,    // <=
+    Greater,      // >
+    GreaterEqual, // >=
+
+    /*
+     * TODO:
+     * And, // &&
+     * Or,  // ||
+     */
 
     Identifier,
-    String,
-    Number,
-    Boolean,
 
     // keywords
     Fn,
     Let,
+    Mut,
     Return,
+
+    Number,
+    True,
+    False,
 
     Eof,
 };

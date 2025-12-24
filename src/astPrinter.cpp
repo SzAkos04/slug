@@ -5,17 +5,12 @@
 #include <variant>
 
 void ASTPrinter::visit(LiteralExpr &expr) {
-    this->printIndent();
     std::visit([&](auto &&value) { std::cout << value; }, expr.value.get());
 }
 
-void ASTPrinter::visit(VariableExpr &expr) {
-    this->printIndent();
-    std::cout << expr.name;
-}
+void ASTPrinter::visit(VariableExpr &expr) { std::cout << expr.name; }
 
 void ASTPrinter::visit(BinaryExpr &expr) {
-    this->printIndent();
     std::cout << "(";
     expr.lhs->accept(*this);
 
@@ -32,6 +27,27 @@ void ASTPrinter::visit(BinaryExpr &expr) {
     case BinaryOp::Div:
         std::cout << " / ";
         break;
+    case BinaryOp::Mod:
+        std::cout << " % ";
+        break;
+    case BinaryOp::Eq:
+        std::cout << " == ";
+        break;
+    case BinaryOp::Neq:
+        std::cout << " != ";
+        break;
+    case BinaryOp::Lt:
+        std::cout << " < ";
+        break;
+    case BinaryOp::Lte:
+        std::cout << " <= ";
+        break;
+    case BinaryOp::Gt:
+        std::cout << " > ";
+        break;
+    case BinaryOp::Gte:
+        std::cout << " >= ";
+        break;
     }
 
     expr.rhs->accept(*this);
@@ -39,8 +55,6 @@ void ASTPrinter::visit(BinaryExpr &expr) {
 }
 
 void ASTPrinter::visit(UnaryExpr &expr) {
-    this->printIndent();
-
     switch (expr.op) {
     case UnaryOp::Negate:
         std::cout << "-";
@@ -81,15 +95,18 @@ void ASTPrinter::visit(FnStmt &stmt) {
 
 void ASTPrinter::visit(LetStmt &stmt) {
     this->printIndent();
-    std::cout << "let " << stmt.name << ": " << stmt.type.kind << " = ";
+    std::cout << "let " << (stmt.mut ? "mut " : "const ") << stmt.name << ": "
+              << stmt.type.kind << " = ";
     if (dynamic_cast<LiteralExpr *>(stmt.initializer.get())) {
         stmt.initializer->accept(*this);
         std::cout << ";" << std::endl;
     } else {
         std::cout << std::endl;
         ++indentLevel;
+        this->printIndent();
         stmt.initializer->accept(*this);
         --indentLevel;
+        std::cout << ";" << std::endl;
     }
 }
 
@@ -103,8 +120,10 @@ void ASTPrinter::visit(ReturnStmt &stmt) {
         } else {
             std::cout << std::endl;
             ++indentLevel;
+            this->printIndent();
             stmt.value->get()->accept(*this);
             --indentLevel;
+            std::cout << ";" << std::endl;
         }
     } else {
         std::cout << "return;" << std::endl;
@@ -114,5 +133,11 @@ void ASTPrinter::visit(ReturnStmt &stmt) {
 void ASTPrinter::visit(Program &stmt) {
     for (const auto &s : stmt.stmts) {
         s->accept(*this);
+    }
+}
+
+void ASTPrinter::printIndent() const {
+    for (int i = 0; i < this->indentLevel; ++i) {
+        std::cout << "  ";
     }
 }

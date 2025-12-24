@@ -3,7 +3,6 @@
 
 #include <cctype>
 #include <fstream>
-#include <iostream>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -15,11 +14,6 @@ std::vector<Token> Lexer::lex(const std::string &infile) {
     while (!this->isAtEnd()) {
         this->start = this->cur;
         this->scanTokens();
-    }
-
-    for (const auto &token : this->tokens) {
-        std::cout << token.getLexeme() << "\t(" << token.getType() << ")"
-                  << std::endl;
     }
 
     this->addToken(TokenType::Eof);
@@ -63,13 +57,41 @@ void Lexer::scanTokens() {
     case ':':
         this->addToken(TokenType::Colon);
         break;
+    case '=':
+        this->addToken(this->match('=') ? TokenType::EqualEqual
+                                        : TokenType::Equal);
+        break;
     case '!':
         this->addToken(this->match('=') ? TokenType::BangEqual
                                         : TokenType::Bang);
         break;
-    case '=':
-        this->addToken(this->match('=') ? TokenType::EqualEqual
-                                        : TokenType::Equal);
+    case '+':
+        this->addToken(this->match('=') ? TokenType::PlusEqual
+                                        : TokenType::Plus);
+        break;
+    case '-':
+        this->addToken(this->match('=') ? TokenType::MinusEqual
+                                        : TokenType::Minus);
+        break;
+    case '*':
+        this->addToken(this->match('=') ? TokenType::StarEqual
+                                        : TokenType::Star);
+        break;
+    case '/':
+        this->addToken(this->match('=') ? TokenType::SlashEqual
+                                        : TokenType::Slash);
+        break;
+    case '%':
+        this->addToken(this->match('=') ? TokenType::PercentEqual
+                                        : TokenType::Percent);
+        break;
+    case '<':
+        this->addToken(this->match('=') ? TokenType::LessEqual
+                                        : TokenType::Less);
+        break;
+    case '>':
+        this->addToken(this->match('=') ? TokenType::GreaterEqual
+                                        : TokenType::Greater);
         break;
     default:
         if (std::isdigit(c)) {
@@ -129,14 +151,15 @@ void Lexer::identifier() {
 
     std::string lexeme = this->src.substr(this->start, this->cur - this->start);
     if (lexeme == "true") {
-        this->addTokenWithLiteral(TokenType::Boolean, Literal(true));
+        this->addToken(TokenType::True);
     } else if (lexeme == "false") {
-        this->addTokenWithLiteral(TokenType::Boolean, Literal(false));
-    } // TODO: add keywords
-    else if (lexeme == "fn") {
+        this->addToken(TokenType::False);
+    } else if (lexeme == "fn") {
         this->addToken(TokenType::Fn);
     } else if (lexeme == "let") {
         this->addToken(TokenType::Let);
+    } else if (lexeme == "mut") {
+        this->addToken(TokenType::Mut);
     } else if (lexeme == "return") {
         this->addToken(TokenType::Return);
     } else {

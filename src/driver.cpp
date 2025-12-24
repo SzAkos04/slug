@@ -63,7 +63,9 @@ void Driver::compile(const CompilerOptions &opts) {
     LLVMCodeGen codegen;
     ast->accept(codegen);
 
-    codegen.getModule()->print(llvm::errs(), nullptr);
+    codegen.dumpIR();
+
+    codegen.emitObjectFile(opts.outfile);
 }
 
 void Driver::showHelp() {

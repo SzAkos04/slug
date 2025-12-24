@@ -19,7 +19,7 @@ std::unique_ptr<Program> Parser::parse() {
     return program;
 }
 
-std::unique_ptr<Stmt> Parser::declaration() {
+StmtPtr Parser::declaration() {
     if (this->peek().getType() == TokenType::Fn) {
         return this->fnDeclaration();
     } else if (this->peek().getType() == TokenType::Let) {
@@ -31,10 +31,8 @@ std::unique_ptr<Stmt> Parser::declaration() {
     }
 }
 
-// fn foo(bar: i32): i32 {
-//     [[block]]
-// }
-std::unique_ptr<Stmt> Parser::fnDeclaration() {
+// fn [[identifier]]([[identifier]]: [[type]]): [[type]] [[block]]
+StmtPtr Parser::fnDeclaration() {
     this->consume(TokenType::Fn, "Expected 'fn' keyword");
 
     Token nameTok =
@@ -68,9 +66,14 @@ std::unique_ptr<Stmt> Parser::fnDeclaration() {
                                     std::move(body));
 }
 
-// let foo: i32 = 5;
-std::unique_ptr<Stmt> Parser::letDeclaration() {
+// let (mut) [[identifier]]: [[type]] = [[expression]];
+StmtPtr Parser::letDeclaration() {
     this->consume(TokenType::Let, "Expected 'let' keyword");
+
+    bool mut = false;
+    if (this->match(TokenType::Mut)) {
+        mut = true;
+    }
 
     Token nameTok =
         this->consume(TokenType::Identifier, "Expected variable name");
@@ -86,12 +89,12 @@ std::unique_ptr<Stmt> Parser::letDeclaration() {
 
     this->consume(TokenType::Semicolon, "Expected ';'");
 
-    return std::make_unique<LetStmt>(nameTok.getLexeme(), type,
+    return std::make_unique<LetStmt>(nameTok.getLexeme(), mut, type,
                                      std::move(initializer));
 }
 
-// return 0;
-std::unique_ptr<Stmt> Parser::returnDeclaration() {
+// return [[expression]];
+StmtPtr Parser::returnDeclaration() {
     this->consume(TokenType::Return, "Expected 'return' keyword");
 
     if (this->peek().getType() == TokenType::Semicolon) {
@@ -109,7 +112,7 @@ std::unique_ptr<Stmt> Parser::returnDeclaration() {
 std::unique_ptr<BlockStmt> Parser::parseBlock() {
     this->consume(TokenType::LeftBrace, "Expected '{'");
 
-    std::vector<std::unique_ptr<Stmt>> stmts;
+    std::vector<StmtPtr> stmts;
 
     while (!this->isAtEnd() &&
            this->peek().getType() != TokenType::RightBrace) {
@@ -121,14 +124,115 @@ std::unique_ptr<BlockStmt> Parser::parseBlock() {
     return std::make_unique<BlockStmt>(std::move(stmts));
 }
 
-std::unique_ptr<Expr> Parser::expression() {
-    Token tok = advance();
-
-    if (!tok.getLiteral().has_value()) {
-        throw std::runtime_error("Expected literal value");
+ExprPtr Parser::expression() {
+    auto lhs = this->unary();
+    if (!lhs) {
+        return nullptr;
     }
 
-    return std::make_unique<LiteralExpr>(*tok.getLiteral());
+    return this->parseBinaryRhs(0, std::move(lhs));
+}
+
+ExprPtr Parser::parseBinaryRhs(int minPrecedence, ExprPtr lhs) {
+    while (true) {
+        const Token &tok = this->peek();
+        int tokPrec = this->getPrecedence(tok.getType());
+
+        // if the next token isn't a binary operator or it has lower precedence
+        // stop
+        if (tokPrec < minPrecedence) {
+            return lhs;
+        }
+
+        // consume operator
+        Token opToken = this->advance();
+
+        // handle rhs
+        auto rhs = this->unary();
+        if (!rhs) {
+            return nullptr;
+        }
+
+        // if the next operator has higher precendence, connect it to the rhs
+        // recursively
+        int nextPrec = this->getPrecedence(this->peek().getType());
+        if (tokPrec < nextPrec) {
+            rhs = this->parseBinaryRhs(tokPrec + 1, std::move(rhs));
+            if (!rhs)
+                return nullptr;
+        }
+
+        lhs =
+            std::make_unique<BinaryExpr>(tokenTypeToBinaryOp(opToken.getType()),
+                                         std::move(lhs), std::move(rhs));
+    }
+}
+
+ExprPtr Parser::unary() {
+    if (this->match(TokenType::Minus) || this->match(TokenType::Bang)) {
+        Token opToken = this->previous();
+        auto operand = this->unary(); // recursion
+        return std::make_unique<UnaryExpr>(
+            tokenTypeToUnaryOp(opToken.getType()), std::move(operand));
+    }
+
+    return this->primary();
+}
+
+ExprPtr Parser::primary() {
+    const Token &tok = this->peek();
+
+    // literals
+    if (this->match(TokenType::Number) || this->match(TokenType::True) ||
+        this->match(TokenType::False)) {
+        return std::make_unique<LiteralExpr>(*this->previous().getLiteral());
+    }
+
+    // variable
+    if (this->match(TokenType::Identifier)) {
+        return std::make_unique<VariableExpr>(this->previous().getLexeme());
+    }
+
+    // parentheses
+    if (this->match(TokenType::LeftParen)) {
+        auto expr = this->expression();
+        this->consume(TokenType::RightParen, "Expected ')' after expression");
+        return expr;
+    }
+
+    throw std::runtime_error(
+        "Parser error at line " + std::to_string(tok.getLine()) +
+        ": Expected expression, found '" + tok.getLexeme() + "'");
+}
+
+int Parser::getPrecedence(TokenType type) const {
+    switch (type) {
+    case TokenType::Star:
+    case TokenType::Slash:
+    case TokenType::Percent:
+        return 6;
+    case TokenType::Plus:
+    case TokenType::Minus:
+        return 5;
+    case TokenType::Less:
+    case TokenType::LessEqual:
+    case TokenType::Greater:
+    case TokenType::GreaterEqual:
+        return 4;
+    case TokenType::EqualEqual:
+    case TokenType::BangEqual:
+        return 3;
+    // case TokenType::And:
+    //     return 2;
+    // case TokenType::Or:
+    //     return 1;
+    default:
+        return -1;
+    }
+}
+
+bool Parser::isBinaryOp(TokenType type) const {
+    return this->getPrecedence(type) != -1;
 }
 
 Type Parser::parseType(const std::string &lexeme) {
@@ -163,13 +267,13 @@ const Token &Parser::advance() {
     return this->tokens[this->cur - 1];
 }
 
-const Token &Parser::consume(TokenType type, const std::string &msg) {
-    if (!this->isAtEnd() && this->tokens[this->cur].getType() == type) {
+const Token &Parser::consume(TokenType expected, const std::string &err) {
+    if (!this->isAtEnd() && this->tokens[this->cur].getType() == expected) {
         return this->tokens[this->cur++];
     }
     throw std::runtime_error("Parser error at line " +
                              std::to_string(this->peek().getLine()) + ": " +
-                             msg);
+                             err);
 }
 
 const Token &Parser::peek() const {
@@ -179,6 +283,8 @@ const Token &Parser::peek() const {
     }
     return this->tokens[this->cur];
 }
+
+const Token &Parser::previous() const { return this->tokens[this->cur - 1]; }
 
 bool Parser::isAtEnd() const {
     return this->cur >= (int)this->tokens.size() ||

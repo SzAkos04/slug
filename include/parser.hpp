@@ -18,20 +18,33 @@ class Parser {
     const std::vector<Token> &tokens;
     int cur = 0;
 
-    std::unique_ptr<Stmt> declaration();
-    std::unique_ptr<Stmt> fnDeclaration();
-    std::unique_ptr<Stmt> letDeclaration();
-    std::unique_ptr<Stmt> returnDeclaration();
+    StmtPtr declaration();
+    StmtPtr fnDeclaration();
+    StmtPtr letDeclaration();
+    StmtPtr returnDeclaration();
 
     std::unique_ptr<BlockStmt> parseBlock();
 
-    std::unique_ptr<Expr> expression();
+    ExprPtr expression();
+    ExprPtr parseBinaryRhs(int precedence, ExprPtr lhs);
+    ExprPtr unary();
+    ExprPtr primary();
+
+    int getPrecedence(TokenType type) const;
+
+    bool isBinaryOp(TokenType type) const;
 
     Type parseType(const std::string &lexeme);
 
     bool match(TokenType type);
+
     const Token &advance();
+
     const Token &consume(TokenType expected, const std::string &err);
+
     const Token &peek() const;
+
+    const Token &previous() const;
+
     bool isAtEnd() const;
 };

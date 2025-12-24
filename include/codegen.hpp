@@ -7,7 +7,9 @@
 #include <llvm/IR/Type.h>
 #include <llvm/IR/Value.h>
 
+#include <llvm/Support/raw_ostream.h>
 #include <memory>
+#include <string>
 #include <utility>
 
 struct CodeGenVisitor : ASTVisitor {
@@ -33,6 +35,8 @@ class LLVMCodeGen : public ASTVisitor {
 
     llvm::Module *getModule() { return module.get(); }
 
+    void emitObjectFile(const std::string &filename);
+
     // Expr visitors
     void visit(LiteralExpr &) override;
     void visit(VariableExpr &) override;
@@ -46,16 +50,24 @@ class LLVMCodeGen : public ASTVisitor {
     void visit(ReturnStmt &) override;
     void visit(Program &) override;
 
+    void dumpIR() const { this->module->print(llvm::outs(), nullptr); }
+
   private:
     std::unique_ptr<llvm::LLVMContext> context;
     std::unique_ptr<llvm::Module> module;
     llvm::IRBuilder<> builder;
 
-    std::unordered_map<std::string, VariableInfo> locals;
+    std::unordered_map<std::string, VariableInfo> symbolTable;
 
     llvm::Value *lastValue = nullptr;
 
+    FnStmt *curFunc;
+
+    void declareGlobals(const Program &);
+    llvm::Value *generateFnPrototype(const FnStmt &);
+    void declareGlobalVariable(const LetStmt &);
+
     llvm::Type *toLLVMType(const Type &type);
-    void declareLocal(const std::string &name, bool mut, const Type *type,
-                      llvm::Value *value);
+    void declareSymbol(const std::string &name, bool mut, const Type *type,
+                       llvm::Value *value);
 };
