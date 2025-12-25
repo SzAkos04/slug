@@ -9,7 +9,9 @@ struct ASTPrinter : ASTVisitor {
     void visit(VariableExpr &expr) override;
     void visit(BinaryExpr &expr) override;
     void visit(UnaryExpr &expr) override;
+    void visit(CallExpr &expr) override;
 
+    void visit(ExpressionStmt &stmt) override;
     void visit(BlockStmt &stmt) override;
     void visit(FnStmt &stmt) override;
     void visit(LetStmt &stmt) override;

@@ -67,6 +67,27 @@ void ASTPrinter::visit(UnaryExpr &expr) {
     expr.operand->accept(*this);
 }
 
+void ASTPrinter::visit(CallExpr &expr) {
+    std::cout << expr.callee << "(";
+    for (size_t i = 0; i < expr.args.size(); ++i) {
+        expr.args[i]->accept(*this);
+        if (i + 1 < expr.args.size()) {
+            std::cout << ", ";
+        }
+    }
+    std::cout << ")";
+}
+
+/////
+
+void ASTPrinter::visit(ExpressionStmt &stmt) {
+    this->printIndent();
+    if (stmt.expr) {
+        stmt.expr->accept(*this);
+    }
+    std::cout << ";" << std::endl;
+}
+
 void ASTPrinter::visit(BlockStmt &stmt) {
     this->printIndent();
     std::cout << "{" << std::endl;

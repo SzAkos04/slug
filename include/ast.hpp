@@ -82,6 +82,26 @@ struct UnaryExpr : Expr {
     void accept(ASTVisitor &visitor) override;
 };
 
+struct CallExpr : Expr {
+    std::string callee;
+    std::vector<ExprPtr> args;
+
+    CallExpr(std::string callee, std::vector<ExprPtr> args)
+        : callee(std::move(callee)), args(std::move(args)) {}
+
+    void accept(ASTVisitor &visitor) override;
+};
+
+/////
+
+struct ExpressionStmt : Stmt {
+    ExprPtr expr;
+
+    explicit ExpressionStmt(ExprPtr expr) : expr(std::move(expr)) {}
+
+    void accept(ASTVisitor &visitor) override;
+};
+
 struct BlockStmt : Stmt {
     std::vector<StmtPtr> stmts;
 
@@ -147,7 +167,9 @@ struct ASTVisitor {
     virtual void visit(VariableExpr &expr) = 0;
     virtual void visit(BinaryExpr &expr) = 0;
     virtual void visit(UnaryExpr &expr) = 0;
+    virtual void visit(CallExpr &expr) = 0;
 
+    virtual void visit(ExpressionStmt &stmt) = 0;
     virtual void visit(BlockStmt &stmt) = 0;
     virtual void visit(FnStmt &stmt) = 0;
     virtual void visit(LetStmt &stmt) = 0;

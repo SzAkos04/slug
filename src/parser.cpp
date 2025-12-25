@@ -188,9 +188,17 @@ ExprPtr Parser::primary() {
         return std::make_unique<LiteralExpr>(*this->previous().getLiteral());
     }
 
-    // variable
+    // variable or function call
     if (this->match(TokenType::Identifier)) {
-        return std::make_unique<VariableExpr>(this->previous().getLexeme());
+        std::string name = previous().getLexeme();
+
+        // if next token is ( it's a function call
+        if (match(TokenType::LeftParen)) {
+            return finishCall(name);
+        }
+
+        // otherwise simple variable expression
+        return std::make_unique<VariableExpr>(name);
     }
 
     // parentheses
@@ -203,6 +211,22 @@ ExprPtr Parser::primary() {
     throw std::runtime_error(
         "Parser error at line " + std::to_string(tok.getLine()) +
         ": Expected expression, found '" + tok.getLexeme() + "'");
+}
+
+ExprPtr Parser::finishCall(const std::string &callee) {
+    std::vector<ExprPtr> args;
+
+    // if the next token is not ), parse args
+    if (peek().getType() != TokenType::RightParen) {
+        do {
+            // every arg is an expression
+            args.push_back(expression());
+        } while (match(TokenType::Comma)); // separated with commas
+    }
+
+    consume(TokenType::RightParen, "Expected ')' after arguments.");
+
+    return std::make_unique<CallExpr>(callee, std::move(args));
 }
 
 int Parser::getPrecedence(TokenType type) const {

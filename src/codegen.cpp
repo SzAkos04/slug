@@ -2,6 +2,7 @@
 #include "codegen.hpp"
 #include "type.hpp"
 
+#include <iostream>
 #include <llvm/IR/BasicBlock.h>
 #include <llvm/IR/Constant.h>
 #include <llvm/IR/Constants.h>
@@ -101,15 +102,24 @@ void LLVMCodeGen::visit(LiteralExpr &expr) {
 }
 
 void LLVMCodeGen::visit(VariableExpr &expr) {
-    auto it = this->symbolTable.find(expr.name);
-    if (it == this->symbolTable.end()) {
+    VariableInfo *info = this->findSymbol(expr.name);
+    if (!info) {
+        this->dumpScopes();
         throw std::runtime_error("Undefined variable: " + expr.name);
+    }
+    llvm::Value *val = info->value;
 
-        VariableInfo &info = it->second;
-        llvm::Value *ptr = info.value;
-        llvm::Type *ptrTy = this->toLLVMType(*info.type);
+    if (!val) {
+        throw std::runtime_error("Error: Variable '" + expr.name +
+                                 "' has no LLVM value.");
+    }
 
-        this->lastValue = this->builder.CreateLoad(ptrTy, ptr, "loadtmp");
+    if (llvm::isa<llvm::AllocaInst>(val)) {
+        llvm::Type *ptrTy = this->toLLVMType(*info->type);
+        this->lastValue =
+            this->builder.CreateLoad(ptrTy, val, (expr.name + ".val").c_str());
+    } else {
+        this->lastValue = val;
     }
 }
 
@@ -189,7 +199,36 @@ void LLVMCodeGen::visit(UnaryExpr &expr) {
     throw std::runtime_error("unary expressions not yet implemented");
 }
 
+void LLVMCodeGen::visit(CallExpr &expr) {
+    llvm::Function *calleeFn = this->module->getFunction(expr.callee);
+
+    if (!calleeFn) {
+        throw std::runtime_error("Unknown function '" + expr.callee + "'");
+    }
+
+    std::vector<llvm::Value *> argsV;
+    for (auto &arg : expr.args) {
+        arg->accept(*this);
+        if (!this->lastValue) {
+            throw std::runtime_error(
+                "Failed to generate code for argument in call to function '" +
+                expr.callee + "'");
+        }
+        argsV.push_back(this->lastValue);
+    }
+    // if the function has no return value (void) the name is an empty string
+    this->lastValue = this->builder.CreateCall(calleeFn, argsV, "calltmp");
+}
+
 ////////
+
+void LLVMCodeGen::visit(ExpressionStmt &stmt) {
+    if (stmt.expr) {
+        stmt.expr->accept(*this);
+    }
+
+    this->lastValue = nullptr;
+}
 
 void LLVMCodeGen::visit(BlockStmt &stmt) {
     for (const auto &stmt : stmt.stmts) {
@@ -197,48 +236,7 @@ void LLVMCodeGen::visit(BlockStmt &stmt) {
     }
 }
 
-void LLVMCodeGen::visit(FnStmt &stmt) {
-    this->curFunc = &stmt;
-    llvm::Function *func = this->module->getFunction(stmt.name);
-    if (!func) {
-        throw std::runtime_error("Use of undeclared function '" + stmt.name +
-                                 "'");
-    }
-
-    llvm::BasicBlock *entry =
-        llvm::BasicBlock::Create(*this->context, "entry", func);
-    this->builder.SetInsertPoint(entry);
-
-    unsigned idx = 0;
-    for (auto &arg : func->args()) {
-        const std::string &paramName = stmt.params[idx].name;
-        arg.setName(paramName);
-        this->declareSymbol(paramName, /*mut=*/false, &stmt.params[idx].type,
-                            &arg);
-        ++idx;
-    }
-
-    stmt.body->accept(*this);
-
-    if (!this->builder.GetInsertBlock()->getTerminator()) {
-        if (stmt.name == "main") {
-            this->builder.CreateRet(llvm::ConstantInt::get(
-                llvm::Type::getInt32Ty(*this->context), 0));
-        } else {
-            llvm::Type *retTy = func->getReturnType();
-            if (retTy->isVoidTy()) {
-                this->builder.CreateRetVoid();
-            } else {
-                this->builder.CreateRet(llvm::Constant::getNullValue(retTy));
-            }
-        }
-    }
-
-    // clear local symbols
-    for (auto &param : stmt.params) {
-        this->symbolTable.erase(param.name);
-    }
-}
+void LLVMCodeGen::visit(FnStmt &stmt) { this->generateFnBody(stmt); }
 
 void LLVMCodeGen::visit(LetStmt &stmt) {
     llvm::Type *llvmTy = this->toLLVMType(stmt.type);
@@ -314,6 +312,9 @@ void LLVMCodeGen::visit(ReturnStmt &stmt) {
 }
 
 void LLVMCodeGen::visit(Program &stmt) {
+    this->scopeStack.clear();
+    this->pushScope(); // global scope (index 0)
+
     this->declareGlobals(stmt);
 
     bool hasMain = false;
@@ -323,14 +324,15 @@ void LLVMCodeGen::visit(Program &stmt) {
             if (fn->name == "main") {
                 hasMain = true;
             }
+
             fn->accept(*this);
         } else {
             throw std::runtime_error("Top level code not yet implemented");
         }
+    }
 
-        if (!hasMain) {
-            throw std::runtime_error("Program is missing 'fn main(): void");
-        }
+    if (!hasMain) {
+        throw std::runtime_error("Program is missing 'fn main(): void");
     }
 
     // verify IR
@@ -343,25 +345,39 @@ void LLVMCodeGen::visit(Program &stmt) {
     }
 }
 
-llvm::Type *LLVMCodeGen::toLLVMType(const Type &type) {
-    switch (type.kind) {
-    case PrimitiveType::Void:
-        return llvm::Type::getVoidTy(*this->context);
-    case PrimitiveType::I32:
-        return llvm::Type::getInt32Ty(*this->context);
-    case PrimitiveType::F64:
-        return llvm::Type::getDoubleTy(*this->context);
-    case PrimitiveType::Bool:
-        return llvm::Type::getInt1Ty(*this->context);
-    default:
-        throw std::runtime_error("Unexpected type");
-    }
-}
+//////
 
 void LLVMCodeGen::declareSymbol(const std::string &name, bool mut,
                                 const Type *type, llvm::Value *value) {
-    this->symbolTable.insert_or_assign(
-        name, VariableInfo(value, mut, std::make_unique<Type>(*type)));
+    if (this->scopeStack.empty()) {
+        this->pushScope();
+    }
+
+    scopeStack.back().insert_or_assign(
+        name, VariableInfo(value, mut, std::make_shared<Type>(*type)));
+}
+
+VariableInfo *LLVMCodeGen::findSymbol(const std::string &name) {
+    // going from back to front
+    for (auto it = scopeStack.rbegin(); it != scopeStack.rend(); ++it) {
+        auto found = it->find(name);
+        if (found != it->end()) {
+            return &(found->second);
+        }
+    }
+    return nullptr;
+}
+
+void LLVMCodeGen::dumpScopes() const {
+    std::cerr << "\n=== SCOPE STACK DUMP ===\n";
+    for (int i = scopeStack.size() - 1; i >= 0; --i) {
+        std::cerr << "Level " << i << (i == 0 ? " (Global): " : " (Local): ");
+        for (const auto &[name, info] : scopeStack[i]) {
+            std::cerr << name << " ";
+        }
+        std::cerr << "\n";
+    }
+    std::cerr << "========================\n\n";
 }
 
 void LLVMCodeGen::declareGlobals(const Program &program) {
@@ -402,6 +418,47 @@ llvm::Value *LLVMCodeGen::generateFnPrototype(const FnStmt &fn) {
     return function;
 }
 
+void LLVMCodeGen::generateFnBody(FnStmt &fn) {
+    llvm::Function *F = module->getFunction(fn.name);
+    if (!F) {
+        throw std::runtime_error(""); // impossible
+    }
+
+    // set current function
+    this->curFunc = &fn;
+
+    // new local scope
+    this->pushScope();
+
+    llvm::BasicBlock *BB = llvm::BasicBlock::Create(*context, "entry", F);
+    builder.SetInsertPoint(BB);
+
+    int argIdx = 0;
+    for (auto &arg : F->args()) {
+        std::string argName = fn.params[argIdx].name;
+        arg.setName(argName);
+
+        this->declareSymbol(argName, /*mut=*/false, &fn.params[argIdx].type,
+                            /*value=*/&arg);
+        ++argIdx;
+    }
+
+    // generate body code
+    fn.body->accept(*this);
+
+    // return void functions if no return
+    if (fn.name == "main") {
+        this->builder.CreateRet(
+            llvm::ConstantInt::get(llvm::Type::getInt32Ty(*this->context), 0));
+    } else if (fn.retType.kind == PrimitiveType::Void && !BB->getTerminator()) {
+        builder.CreateRetVoid();
+    }
+
+    // unset current function
+    this->popScope();
+    this->curFunc = nullptr;
+}
+
 void LLVMCodeGen::declareGlobalVariable(const LetStmt &let) {
     llvm::Constant *initConstant = nullptr;
 
@@ -428,4 +485,19 @@ void LLVMCodeGen::declareGlobalVariable(const LetStmt &let) {
         llvm::GlobalValue::ExternalLinkage, initConstant, let.name);
 
     this->declareSymbol(let.name, let.mut, &let.type, globalVar);
+}
+
+llvm::Type *LLVMCodeGen::toLLVMType(const Type &type) {
+    switch (type.kind) {
+    case PrimitiveType::Void:
+        return llvm::Type::getVoidTy(*this->context);
+    case PrimitiveType::I32:
+        return llvm::Type::getInt32Ty(*this->context);
+    case PrimitiveType::F64:
+        return llvm::Type::getDoubleTy(*this->context);
+    case PrimitiveType::Bool:
+        return llvm::Type::getInt1Ty(*this->context);
+    default:
+        throw std::runtime_error("Unexpected type");
+    }
 }

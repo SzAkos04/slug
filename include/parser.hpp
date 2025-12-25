@@ -29,6 +29,7 @@ class Parser {
     ExprPtr parseBinaryRhs(int precedence, ExprPtr lhs);
     ExprPtr unary();
     ExprPtr primary();
+    ExprPtr finishCall(const std::string &callee);
 
     int getPrecedence(TokenType type) const;
 
